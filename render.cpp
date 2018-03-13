@@ -21,18 +21,16 @@ The Bela software is distributed under the GNU Lesser General Public License
 (LGPL 3.0), available here: https://www.gnu.org/licenses/lgpl-3.0.txt
 */
 
-
 #include <Bela.h>
+#include <xenomai/init.h>
+#include <signal.h>
 #include <cmath>
 #include <math.h>
 #include "Adafruit_FXOS8700.h"
 #include "Adafruit_FXAS21002C.h"
 
-
-#include <OSCServer.h>
 #include <OSCClient.h>
 
-OSCServer oscServer;
 OSCClient oscClient;
 
 
@@ -73,120 +71,66 @@ void MadgwickAHRSupdateIMU(float gx, float gy, float gz, float ax, float ay, flo
 // How many pins there are
 #define NUM_TOUCH_PINS 12
 
-// Define this to print data to terminal
-#undef DEBUG_MPR121
 
 // Change this to change how often the imu is read (in Hz)
 int readInterval = sampleFreq;
 
 
-
-// ---- test code stuff -- can be deleted for your example ----
-
-float gFrequency = 440.0;
-float gPhase;
-float gInverseSampleRate;
-
-
-// ---- internal stuff -- do not change -----
-
 Adafruit_FXOS8700 accmag(0x8700A, 0x8700B);			// Object to handle FXOS8700 sensing
 Adafruit_FXAS21002C gyro(0x0021002C);
 AuxiliaryTask i2cTask;		// Auxiliary task to read I2C
 
-int readCount = 0;			// How long until we read again...
-int readIntervalSamples = 0; // How many samples between reads
-
 void readIMU(void*);
 
-// parse messages received by OSC Server
-// msg is Message class of oscpkt: http://gruntthepeon.free.fr/oscpkt/
-int parseMessage(oscpkt::Message msg){
-    
-    rt_printf("received message to: %s\n", msg.addressPattern().c_str());
-    
-    int intArg;
-    float floatArg;
-    if (msg.match("/osc-test").popInt32(intArg).popFloat(floatArg).isOkNoMoreArgs()){
-        rt_printf("received int %i and float %f\n", intArg, floatArg);
-    }
-    return intArg;
+int remotePort = 57120;
+const char* remoteIp = "127.0.0.1";
+
+extern int gXenomaiInited;
+
+
+// Handle Ctrl-C by requesting that the audio rendering stop
+void interrupt_handler(int var)
+{
+    gShouldStop = true;
 }
 
-int localPort = 7562;
-int remotePort = 57120;
-const char* remoteIp = "192.168.7.1";
-
-bool setup(BelaContext *context, void *userData)
+int main(int main_argc, char *main_argv[])
 {
+	// Setup threading 
+	int argc = 0;
+	char *const *argv;
+    xenomai_init(&argc, &argv);
+    gXenomaiInited = 1;
+    
+    // Set up interrupt handler to catch Control-C and SIGTERM
+    signal(SIGINT, interrupt_handler);
+    signal(SIGTERM, interrupt_handler);
+
+    // Run until told to stop
 	if(!accmag.begin(ACCEL_RANGE_2G)) {
-		rt_printf("Error initialising FXOS8700\n");
+		printf("Error initialising FXOS8700\n");
 		return false;
 	}
 	if(!gyro.begin()) {
-		rt_printf("Error initialising FXAS21002C\n");
+		printf("Error initialising FXAS21002C\n");
 		return false;
 	}
 	// Function to be run, priority, name
-	i2cTask = Bela_createAuxiliaryTask(readIMU, 50, "bela-FXOS8700");
-	readIntervalSamples = context->audioSampleRate / readInterval;
-	
-	// synthesis
-	gInverseSampleRate = 1.0 / context->audioSampleRate;
-	gPhase = 0.0;
+	i2cTask = Bela_createAuxiliaryTask(readIMU, 50, "bela-IMU");
 	
 	
 	// OSC 
-	oscServer.setup(localPort);
     oscClient.setup(remotePort, remoteIp);
-    
-    // the following code sends an OSC message to address /osc-setup
-    // then waits 1 second for a reply on /osc-setup-reply
-    bool handshakeReceived = false;
-    oscClient.sendMessageNow(oscClient.newMessage.to("/osc-setup").end());
-    oscServer.receiveMessageNow(1000);
-    while (oscServer.messageWaiting()){
-        if (oscServer.popMessage().match("/osc-setup-reply")){
-            handshakeReceived = true;
-        }
-    }
-    
-    if (handshakeReceived){
-        rt_printf("handshake received!\n");
-    } else {
-        rt_printf("timeout!\n");
-	}
 
-	return true;
+	int sleepTime = 1000000/sampleFreq;
+	while(!gShouldStop)
+		Bela_scheduleAuxiliaryTask(i2cTask);
+  		usleep(sleepTime);
+	return false;
+	
+    Bela_deleteAllAuxiliaryTasks();
 }
 
-void render(BelaContext *context, void *userData)
-{
-	for(unsigned int n = 0; n < context->audioFrames; n++) {
-		// Keep this code: it schedules the touch sensor readings
-		if(++readCount >= readIntervalSamples) {
-			readCount = 0;
-			Bela_scheduleAuxiliaryTask(i2cTask);
-		}
-		
-		while (oscServer.messageWaiting()){
-        	int count = parseMessage(oscServer.popMessage());
-        	oscClient.queueMessage(oscClient.newMessage.to("/osc-acknowledge").add(count).add(4.2f).add(std::string("OSC message received")).end());
-		}
-
-	
-	
-		// synthesis
-		float out = 0.8 * sinf(gPhase);
-		gPhase += 2.0 * M_PI * gFrequency * gInverseSampleRate;
-		if(gPhase > 2.0 * M_PI)
-			gPhase -= 2.0 * M_PI;
-	
-		for(unsigned int channel = 0; channel < context->audioOutChannels; channel++) {
-			audioWrite(context, n, channel, out);
-		}
-	}
-}
 
 void cleanup(BelaContext *context, void *userData)
 { }
@@ -202,20 +146,20 @@ void readIMU(void*)
 	
 	// Do some analysis
 	accmag.calculateVelocity();
-	//rt_printf("VELOCITY x: %f, y: %f, z: %f\n", accmag.accel_vel.x, accmag.accel_vel.y, accmag.accel_vel.z);
+	//printf("VELOCITY x: %f, y: %f, z: %f\n", accmag.accel_vel.x, accmag.accel_vel.y, accmag.accel_vel.z);
 	float mag = sqrt(pow(accmag.accel_vel.x, 2) + pow(accmag.accel_vel.y, 2) + pow(accmag.accel_vel.z, 2));
 	mag = mag * 50;
-	//rt_printf("MAGNITUDE: %f \n", mag);
+	//printf("MAGNITUDE: %f \n", mag);
 	oscClient.sendMessageNow(oscClient.newMessage.to("/imu").add(mag).end());
 	
 	
 	
 	//float Racc = std::sqrt(pow(accmag.accel_ms2.x, 2) + pow(accmag.accel_ms2.y, 2) + pow(accmag.accel_ms2.z, 2));
-	//rt_printf("Racc= %f", Racc);
+	//printf("Racc= %f", Racc);
 	MadgwickAHRSupdate(gyro.data.x, gyro.data.y, gyro.data.z, accmag.accel_ms2.x, accmag.accel_ms2.y, accmag.accel_ms2.z, accmag.mag_uTesla.x, accmag.mag_uTesla.y, accmag.mag_uTesla.z);
-	//rt_printf("Madgwick q0: %f, q1: %f, q2: %f, q3: %f\n", q0, q1, q2, q3);
+	//printf("Madgwick q0: %f, q1: %f, q2: %f, q3: %f\n", q0, q1, q2, q3);
 	// You can use this to read binary on/off touch state more easily
-	//rt_printf("Touched: %x\n", mpr121.touched());
+	//printf("Touched: %x\n", mpr121.touched());
 }
 
 //=====================================================================================================

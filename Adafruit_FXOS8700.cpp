@@ -104,14 +104,13 @@ bool Adafruit_FXOS8700::begin(fxos8700AccelRange_t rng)
 
   /* Make sure we have the correct chip ID since this checks
      for correct address and that the IC is properly connected */
- // uint8_t id = readRegister8(FXOS8700_REGISTER_WHO_AM_I);
  i2c_char_t answer[1];
   readRegisters(FXOS8700_REGISTER_WHO_AM_I, answer, 1);
-  rt_printf("%i", answer[0]);
-  rt_printf("\n");
+  printf("%i", answer[0]);
+  printf("\n");
   if (answer[0] != FXOS8700_ID)
   {
-  	rt_printf("Wrong ID returned from FXOS8700\n");
+  	printf("Wrong ID returned from FXOS8700\n");
     return false;
   }
   
@@ -207,13 +206,13 @@ void Adafruit_FXOS8700::readSensor() {
   
   // Read all values
   readRegisters(FXOS8700_REGISTER_STATUS, buffer, 13);
-  //rt_printf("Status: %i\n", buffer[0]); // post status
+  //printf("Status: %i\n", buffer[0]); // post status
   // 14-bit accelerometer data to 16-bit
   accel_raw.x = (int16_t)((buffer[1] << 8) | buffer[2]) >> 2;
   accel_raw.y = (int16_t)((buffer[3] << 8) | buffer[4]) >> 2;
   accel_raw.z = (int16_t)((buffer[5] << 8) | buffer[6]) >> 2;
   
-  //rt_printf("x=%i, y=%i, z=%i\n", accel_raw.x, accel_raw.y, accel_raw.z);
+  //printf("x=%i, y=%i, z=%i\n", accel_raw.x, accel_raw.y, accel_raw.z);
   
   // 16-bit magnetometer data
   mag_raw.x = (buffer[7] << 8) | buffer[8];

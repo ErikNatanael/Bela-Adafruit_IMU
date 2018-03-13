@@ -105,10 +105,10 @@ bool Adafruit_FXAS21002C::begin(gyroRange_t rng)
      for correct address and that the IC is properly connected */
   i2c_char_t answer[1];
   readRegisters(GYRO_REGISTER_WHO_AM_I, answer, 1);
-  rt_printf("%i\n", answer[0]);
+  printf("%i\n", answer[0]);
   if (answer[0] != FXAS21002C_ID)
   {
-  	rt_printf("Wrong ID returned from FXAS21002C\n");
+  	printf("Wrong ID returned from FXAS21002C\n");
     return false;
   }
 
