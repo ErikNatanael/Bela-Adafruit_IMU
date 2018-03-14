@@ -82,9 +82,16 @@ AuxiliaryTask i2cTask;		// Auxiliary task to read I2C
 
 void readIMU(void*);
 
-int remotePort = 57120;
-const char* remoteIp = "127.0.0.1";
+// SuperCollider default ports: 57120 = sclang, 57110 = scsynth
+// Send OSC messages to local sclang
+/*int remotePort = 57120;
+const char* remoteIp = "127.0.0.1";*/
 
+// Send OSC messages to remote sclang
+int remotePort = 57120;
+const char* remoteIp = "192.168.7.1";
+
+// Required to init auxiliary tasks
 extern int gXenomaiInited;
 
 
@@ -124,8 +131,10 @@ int main(int main_argc, char *main_argv[])
 
 	int sleepTime = 1000000/sampleFreq;
 	while(!gShouldStop)
+	{
 		Bela_scheduleAuxiliaryTask(i2cTask);
   		usleep(sleepTime);
+	}
 	return false;
 	
     Bela_deleteAllAuxiliaryTasks();
@@ -142,7 +151,7 @@ void readIMU(void*)
 	accmag.readSensor();
 	gyro.readSensor();
 	
-	//rt_printf("GYRO x=%f, y=%f, z=%f\n", gyro.data.x, gyro.data.y, gyro.data.z);
+	//printf("GYRO x=%f, y=%f, z=%f\n", gyro.data.x, gyro.data.y, gyro.data.z);
 	
 	// Do some analysis
 	accmag.calculateVelocity();
@@ -156,7 +165,7 @@ void readIMU(void*)
 	
 	//float Racc = std::sqrt(pow(accmag.accel_ms2.x, 2) + pow(accmag.accel_ms2.y, 2) + pow(accmag.accel_ms2.z, 2));
 	//printf("Racc= %f", Racc);
-	MadgwickAHRSupdate(gyro.data.x, gyro.data.y, gyro.data.z, accmag.accel_ms2.x, accmag.accel_ms2.y, accmag.accel_ms2.z, accmag.mag_uTesla.x, accmag.mag_uTesla.y, accmag.mag_uTesla.z);
+	//MadgwickAHRSupdate(gyro.data.x, gyro.data.y, gyro.data.z, accmag.accel_ms2.x, accmag.accel_ms2.y, accmag.accel_ms2.z, accmag.mag_uTesla.x, accmag.mag_uTesla.y, accmag.mag_uTesla.z);
 	//printf("Madgwick q0: %f, q1: %f, q2: %f, q3: %f\n", q0, q1, q2, q3);
 	// You can use this to read binary on/off touch state more easily
 	//printf("Touched: %x\n", mpr121.touched());
