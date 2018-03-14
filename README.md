@@ -23,8 +23,6 @@ There is also a slightly adapted version of the Madgwick sensor fusion algorithm
 * http://x-io.co.uk/open-source-imu-and-ahrs-algorithms/
 
 
-See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
-
 ## License
 
 The code in Adafruit_FXOS8700.cpp/.h and Adafruit_FXAS21002C.cpp/.h is licensed under the MIT License in accordance with the Adafruit original license - see the [LICENSE.md](LICENSE.md) file for details.
